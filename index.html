@@ -1,0 +1,325 @@
+<!doctype html>
+<html>
+<head><title>Blank Spaces</title></head>
+<body>
+
+<style>
+body, #border {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  bottom: 0;
+}
+
+body {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: none;
+}
+
+#border {
+  border: 1px solid yellow;
+}
+
+#lyrics {
+  margin: 0 10vw;
+  color: green;
+  font-size: 2.5vw;
+  font-family: monospace;
+  text-align: center;
+  text-shadow: 0 0 10px black;
+  white-space: pre-wrap;
+}
+
+* {
+  -webkit-user-select: none;
+}
+</style>
+
+<script>
+// Lyrics by Andrew Watterson (@andrewwatterson)
+// Code by Max Goodman (@chromakode)
+const chorus1 = `
+  We'll debate this in an Issue
+  Each too sure that we're right inside
+  With the hope that when it's over
+  You'll rewrite your style guide
+  Starbucks wifi's got me covered
+  I'll refute you then explain
+  You should know that my way's better
+  And your way is lame
+`
+
+const chorus2 = `
+  'Cause although this thing is feckless
+  I'll argue way too long
+  Doesn't matter if it works well
+  When your code style's wrong
+  Starbucks wifi's got me covered
+  I'll refute you then explain
+  That it's all just white space baby
+  But it's not the same
+`
+
+let lyrics = [
+  `
+  Nice to meet you, my name's Dan
+  I write modules for a living
+  ECMAScripting: yes I can
+  Saw your code and I thought
+  Oh my god, it's the best
+  Reading it I'm #blessed
+  But please accept this pull request...
+  `,
+  `
+  Lines should start with tab not space
+  Why use four bytes when one will do
+  And a new line for each brace
+  Glad I'm here now to fix it for you
+  And hey - one more hint
+  Write this into ESLint
+  Space-indenting should be banned
+  (But I can make your bad style good and we'll stay friends)
+  `,
+
+  chorus1,
+  chorus2,
+
+  `:O`,
+
+  `
+  Text me asking where I am
+  'Cause you're rolling right up to the club
+  But I've got a different jam
+  Poppin' bottles while I'm browsin' GitHub
+  Don't care what you say
+  JavaScript is so my bae
+  Long as I can get my way
+  ...Oh no...
+  `,
+
+  `
+  What will make up our app's core
+  Take a seat now and hear you me
+  Lodash over Underscore
+  Don't you dare suggest jQuery
+  Use Vim or Emacs
+  Angular or React
+  Best be sure what you believe (in)
+  ('Cause I'm prepared to fight until you lit'rally can't even)
+  `,
+
+  chorus1,
+  chorus2,
+
+  `;)`,
+
+  `
+  Chrome's dev tools are way better than Safari
+  I'm sorry I'm not, Sorry I'm not sorry...
+  Chrome's dev tools are way better than Safari
+  I'm sorry I'm not, Sorry I'm not sorry...
+  `,
+
+  chorus1,
+  chorus2,
+
+  '\\o/',
+]
+
+const lineLyrics = []
+lyrics.forEach(verse =>
+  verse.trim().split('\n').forEach(line =>
+    line && lineLyrics.push(line)
+  )
+)
+lyrics = lineLyrics
+
+let lyricsIdx = -1
+
+const lyricsEl = document.createElement('div')
+lyricsEl.id = 'lyrics'
+document.body.appendChild(lyricsEl)
+
+const borderEl = document.createElement('div')
+borderEl.id = 'border'
+document.body.appendChild(borderEl)
+
+let ctx = new AudioContext()
+
+function dl(url, cb) {
+  return new Promise(resolve => {
+    fetch(url)
+      .then(resp => resp.arrayBuffer())
+      .then(ab => ctx.decodeAudioData(ab))
+      .then(resolve)
+  })
+}
+
+let sampleMap
+let verbN
+let verbFilterN
+
+let outN = ctx.createAnalyser()
+outN.fftSize = 2048
+outN.smoothingTimeConstant = 1
+outN.connect(ctx.destination)
+const analyserData = new Float32Array(outN.fftSize)
+
+function updateBg() {
+  outN.getFloatTimeDomainData(analyserData)
+
+  let tot = 0
+  for (let i = 0; i < outN.frequencyBinCount; i++) {
+    tot += Math.abs(analyserData[i])
+  }
+  const avg = tot / outN.frequencyBinCount
+  document.body.style.backgroundColor = `rgb(0, ${Math.floor(avg * 64)}, 0)`
+  borderEl.style.borderWidth = (sampleMap ? 5 : 1) + Math.floor(avg * 100) + 'px'
+  requestAnimationFrame(updateBg)
+}
+updateBg()
+
+Promise.all([
+  // 808 samples from soundpacks.com
+  dl('808-Kicks03.wav'),
+  dl('808-Snare15.wav'),
+  dl('808-Clap10.wav'),
+]).then(([kickD, snareD, clapD]) => {
+  console.log('loaded')
+  borderEl.style.borderColor = 'green'
+
+  sampleMap = {
+    a: {buf: kickD, gain: 1, clapFreq: 440},
+    f: {buf: snareD, gain: 1, clapFreq: 3 * 440},
+    clap: {buf: clapD},
+  }
+})
+
+// Impulse file by Aleksey Vaneev
+dl('Five Columns.wav').then(ad => {
+  verbFilterN = ctx.createBiquadFilter()
+  verbFilterN.frequency.value = 440
+  verbFilterN.type = 'lowpass'
+  verbN = ctx.createConvolver()
+  verbN.buffer = ad
+  verbN.connect(verbFilterN)
+  verbFilterN.connect(outN)
+})
+
+function play({buf, gain, clapFreq}, when) {
+  let gainN = ctx.createGain()
+  gainN.gain.value = gain
+
+  let filterN = ctx.createBiquadFilter()
+  filterN.frequency.value = 220
+  filterN.gain.value = 1.5
+  filterN.type = 'lowshelf'
+
+  let bsN = ctx.createBufferSource()
+  bsN.buffer = buf
+
+  let clapN = ctx.createBufferSource()
+  clapN.buffer = sampleMap.clap.buf
+
+  let clapFilterN = ctx.createBiquadFilter()
+  clapFilterN.frequency.value = clapFreq
+  clapFilterN.type = 'lowpass'
+
+  let clapGainN = ctx.createGain()
+  clapGainN.gain.value = 1.25
+
+  clapN.connect(clapFilterN)
+  clapFilterN.connect(clapGainN)
+  clapGainN.connect(verbN)
+
+  bsN.connect(filterN)
+  filterN.connect(gainN)
+  gainN.connect(verbN)
+  gainN.connect(outN)
+
+  bsN.start(when)
+  clapN.start(when)
+}
+
+
+let recording = false
+let loopTimeout
+let loop
+
+function playLoop(when) {
+  const start = loop[0][0]
+  const end = loop[loop.length - 1][0]
+  const dur = end - start
+
+  if (dur < .5) {
+    return
+  }
+
+  for (let [time, key] of loop) {
+    if (sampleMap[key]) {
+      play(sampleMap[key], when + time - start)
+    }
+  }
+  loopTimeout = setTimeout(() => playLoop(when + dur), 1000 * dur)
+}
+
+function action(key) {
+  console.log(key)
+  if (!sampleMap) {
+    return
+  }
+
+  const now = ctx.currentTime
+
+  if (recording) {
+    loop.push([now, key])
+  }
+
+  if (sampleMap[key]) {
+    play(sampleMap[key])
+  } else if (key === "'") {
+    if (!recording) {
+      console.log('recording')
+      loop = []
+      recording = now
+      borderEl.style.borderColor = 'red'
+    } else {
+      console.log('finished recording', loop)
+      recording = false
+      playLoop(now)
+      borderEl.style.borderColor = 'green'
+    }
+  } else if (key === ';') {
+    if (loopTimeout) {
+      clearTimeout(loopTimeout)
+    } else {
+      playLoop(now)
+    }
+  } else if (key === 'ArrowRight' || key === 'ArrowLeft' || key === ' ') {
+    const delta = key === 'ArrowLeft' ? -1 : 1
+    lyricsIdx = (lyricsIdx + delta + lyrics.length) % lyrics.length
+    lyricsEl.textContent = lyrics[lyricsIdx].trim().replace(/\n\s*/g, '\n')
+  }
+}
+
+window.addEventListener('keydown', ev => action(ev.key))
+
+let lastClick = 0
+window.addEventListener('mousedown', ev => {
+  ev.preventDefault()
+  const now = ctx.currentTime
+  if (now - lastClick < .25) {
+    return
+  }
+  lastClick = now
+  action(' ')
+})
+
+document.body.addEventListener('contextmenu', ev => ev.preventDefault())
+</script>
+
+</body>
+</html>
